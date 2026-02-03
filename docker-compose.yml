@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: openclawmarket-db
+    environment:
+      POSTGRES_USER: ocm_user
+      POSTGRES_PASSWORD: ocm_password
+      POSTGRES_DB: openclawmarket
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ocm_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: openclawmarket-cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: openclawmarket-app
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://ocm_user:ocm_password@postgres:5432/openclawmarket
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: dev-secret-key-change-in-production
+      NEXT_PUBLIC_API_URL: http://localhost:3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - /app/.next
+      - /app/node_modules
+    command: sh -c "npm run db:push && npm run dev"
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: openclawmarket-network
