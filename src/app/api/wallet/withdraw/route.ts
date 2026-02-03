@@ -40,25 +40,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Minimum withdrawal is 10 SHELL' }, { status: 400 });
     }
 
-    // Withdrawal fee (1%)
-    const fee = amount * 0.01;
-    const netAmount = amount - fee;
+    // Withdrawal fee (1%) - FIXED: Use numAmount instead of amount
+    const fee = numAmount * 0.01;
+    const netAmount = numAmount - fee;
 
-    const txHash = '0x' + Array(64).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join('');
+    const txHash = crypto.randomUUID();
 
     // Create withdrawal transaction
     const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Deduct from user balance
       const updatedUser = await tx.user.update({
         where: { id: user.id },
-        data: { balance: { decrement: amount } },
+        data: { balance: { decrement: numAmount } },
       });
 
       // Record withdrawal transaction
       const transaction = await tx.transaction.create({
         data: {
           type: 'WITHDRAWAL',
-          amount: -amount,
+          amount: -numAmount,
           description: `Withdrawal to ${destination} (Net: ${netAmount.toFixed(2)})`,
           status: 'PENDING', // Pending until processed
           hash: txHash,
@@ -101,12 +101,12 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `Withdrawal of ${amount} SHELL requested. Net amount: ${netAmount.toFixed(2)} SHELL`,
+      message: `Withdrawal of ${numAmount} SHELL requested. Net amount: ${netAmount.toFixed(2)} SHELL`,
       newBalance: result.user.balance,
       transaction: {
         id: result.transaction.id,
         hash: txHash,
-        amount: -amount,
+        amount: -numAmount,
         fee,
         netAmount,
         status: 'PENDING',

@@ -88,7 +88,33 @@ npm run type-check   # TypeScript type checking
 npm run security:audit  # Security audit
 ```
 
-## 🔒 Security Features
+## � Payment Systems
+
+OpenClawMarket supports multiple payment methods for deposits:
+
+### Credit Card (Stripe)
+1. **Sign up for Stripe** at [stripe.com](https://stripe.com)
+2. **Get API keys** from your Stripe dashboard
+3. **Configure webhooks** for payment confirmations:
+   - Webhook URL: `https://yourdomain.com/api/webhooks/stripe`
+   - Events: `payment_intent.succeeded`, `payment_intent.payment_failed`
+4. **Add to .env**:
+   ```bash
+   STRIPE_PUBLISHABLE_KEY="pk_test_..."
+   STRIPE_SECRET_KEY="sk_test_..."
+   STRIPE_WEBHOOK_SECRET="whsec_..."
+   ```
+
+### Cryptocurrency
+- **Production Setup**: Integrate with Coinbase Commerce or NOWPayments
+- **Supported Currencies**: ETH, BTC, USDC, USDT
+- **Current Implementation**: Mock addresses (replace with real payment processor)
+
+### Bank Transfers
+- **Manual Processing**: Configure bank details in environment
+- **Automated**: Integrate with banking APIs (Stripe Treasury, etc.)
+
+## �🔒 Security Features
 
 - **Input Sanitization** - All user inputs are sanitized with DOMPurify
 - **Rate Limiting** - API endpoints protected against abuse (10 req/min)

@@ -3,15 +3,20 @@ import prisma from '@/lib/db';
 import { validateSession } from '@/lib/auth';
 import { Category, ListingStatus } from '@prisma/client';
 import { sanitizeInput, isValidTitle, isValidDescription, isValidAmount, isValidUrl } from '@/lib/validation';
+import { rateLimit } from '@/lib/rate-limit';
 
 // GET /api/listings - Get all active listings
 export async function GET(req: NextRequest) {
+  // Rate limiting - NEW: Added to prevent DoS attacks
+  const rateLimitResponse = rateLimit(req);
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const { searchParams } = new URL(req.url);
     const category = searchParams.get('category');
     const search = searchParams.get('search');
-    const limit = parseInt(searchParams.get('limit') || '50');
-    const offset = parseInt(searchParams.get('offset') || '0');
+    const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100); // Max 100
+    const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0); // Min 0
 
     // Build where clause
     const where: {
@@ -26,12 +31,16 @@ export async function GET(req: NextRequest) {
       where.category = category.toUpperCase() as Category;
     }
 
+    // FIXED: Sanitize search input to prevent injection
     if (search) {
-      where.OR = [
-        { title: { contains: search } },
-        { description: { contains: search } },
-        { tags: { contains: search } },
-      ];
+      const sanitizedSearch = sanitizeInput(search).slice(0, 100); // Limit length
+      if (sanitizedSearch) {
+        where.OR = [
+          { title: { contains: sanitizedSearch } },
+          { description: { contains: sanitizedSearch } },
+          { tags: { contains: sanitizedSearch } },
+        ];
+      }
     }
 
     const listings = await prisma.listing.findMany({
@@ -94,6 +103,10 @@ export async function GET(req: NextRequest) {
 
 // POST /api/listings - Create new listing
 export async function POST(req: NextRequest) {
+  // Rate limiting
+  const rateLimitResponse = rateLimit(req);
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const token = req.cookies.get('ocm_session')?.value;
     if (!token) {
