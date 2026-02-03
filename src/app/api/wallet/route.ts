@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 import { validateSession } from '@/lib/auth';
+import { Transaction as TransactionType } from '@prisma/client';
 
 // GET /api/wallet - Get wallet info & transactions
 export async function GET(req: NextRequest) {
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest) {
     });
 
     // Format transactions
-    const formattedTx = transactions.map((tx) => ({
+    const formattedTx = transactions.map((tx: TransactionType) => ({
       id: tx.id,
       type: tx.type,
       amount: tx.amount,
