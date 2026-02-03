@@ -43,9 +43,12 @@ export async function GET(req: NextRequest) {
       transactions: formattedTx,
     });
   } catch (error) {
-    console.error('Get wallet error:', error);
+    console.error('Get wallet error:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json(
-      { error: 'Failed to fetch wallet' },
+      { error: 'Failed to fetch wallet. Please try again.' },
       { status: 500 }
     );
   }

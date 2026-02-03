@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 import { validateSession } from '@/lib/auth';
 import { Category, ListingStatus } from '@prisma/client';
+import { sanitizeInput, isValidTitle, isValidDescription, isValidAmount, isValidUrl } from '@/lib/validation';
 
 // GET /api/listings - Get all active listings
 export async function GET(req: NextRequest) {
@@ -80,9 +81,12 @@ export async function GET(req: NextRequest) {
       hasMore: offset + listings.length < total,
     });
   } catch (error) {
-    console.error('Get listings error:', error);
+    console.error('Get listings error:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json(
-      { error: 'Failed to fetch listings' },
+      { error: 'Failed to fetch listings. Please try again.' },
       { status: 500 }
     );
   }
@@ -103,15 +107,23 @@ export async function POST(req: NextRequest) {
 
     const { title, description, price, category, tags, imageUrl } = await req.json();
 
+    // Sanitize inputs
+    const sanitizedTitle = sanitizeInput(title);
+    const sanitizedDescription = sanitizeInput(description);
+    const sanitizedImageUrl = imageUrl ? sanitizeInput(imageUrl) : null;
+
     // Validation
-    if (!title || title.length < 5) {
-      return NextResponse.json({ error: 'Title must be at least 5 characters' }, { status: 400 });
+    if (!isValidTitle(sanitizedTitle)) {
+      return NextResponse.json({ error: 'Title must be 5-200 characters' }, { status: 400 });
     }
-    if (!description || description.length < 20) {
-      return NextResponse.json({ error: 'Description must be at least 20 characters' }, { status: 400 });
+    if (!isValidDescription(sanitizedDescription)) {
+      return NextResponse.json({ error: 'Description must be 20-5000 characters' }, { status: 400 });
     }
-    if (!price || price <= 0) {
-      return NextResponse.json({ error: 'Price must be greater than 0' }, { status: 400 });
+    if (!isValidAmount(price)) {
+      return NextResponse.json({ error: 'Price must be a positive number (max 1,000,000)' }, { status: 400 });
+    }
+    if (sanitizedImageUrl && !isValidUrl(sanitizedImageUrl)) {
+      return NextResponse.json({ error: 'Invalid image URL format' }, { status: 400 });
     }
 
     const validCategories = ['KNOWLEDGE', 'SERVICE', 'COMPUTE', 'ART', 'ACCESS', 'DATA'];
@@ -122,12 +134,12 @@ export async function POST(req: NextRequest) {
 
     const listing = await prisma.listing.create({
       data: {
-        title,
-        description,
+        title: sanitizedTitle,
+        description: sanitizedDescription,
         price: parseFloat(price),
         category: upperCategory as 'KNOWLEDGE' | 'SERVICE' | 'COMPUTE' | 'ART' | 'ACCESS' | 'DATA',
         tags: JSON.stringify(tags || []),
-        imageUrl,
+        imageUrl: sanitizedImageUrl,
         sellerId: user.id,
       },
       include: {
@@ -156,9 +168,12 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Create listing error:', error);
+    console.error('Create listing error:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json(
-      { error: 'Failed to create listing' },
+      { error: 'Failed to create listing. Please try again.' },
       { status: 500 }
     );
   }

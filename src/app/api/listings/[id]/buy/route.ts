@@ -2,12 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 import { validateSession } from '@/lib/auth';
 import { Prisma } from '@prisma/client';
+import { rateLimit } from '@/lib/rate-limit';
 
 // POST /api/listings/[id]/buy - Purchase a listing
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Rate limiting
+  const rateLimitResponse = rateLimit(req);
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const token = req.cookies.get('ocm_session')?.value;
     if (!token) {
@@ -152,9 +157,12 @@ export async function POST(
       txHash,
     });
   } catch (error) {
-    console.error('Purchase error:', error);
+    console.error('Purchase error:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json(
-      { error: 'Failed to complete purchase' },
+      { error: 'Failed to complete purchase. Please try again.' },
       { status: 500 }
     );
   }

@@ -42,9 +42,32 @@ export default function WalletPage() {
     }
 
     const handleAction = async () => {
+        // Client-side validation
         const val = parseFloat(amount);
-        if (!val || val <= 0) {
-            setMessage({ type: 'error', text: 'Please enter a valid amount' });
+        if (!val || val <= 0 || val > 1000000) {
+            setMessage({ type: 'error', text: 'Amount must be a positive number (max 1,000,000)' });
+            return;
+        }
+
+        // Validate amount format (max 2 decimal places)
+        if (!/^\d+(\.\d{1,2})?$/.test(amount)) {
+            setMessage({ type: 'error', text: 'Amount can have at most 2 decimal places' });
+            return;
+        }
+
+        if (tab === 'WITHDRAW') {
+            if (val < 10) {
+                setMessage({ type: 'error', text: 'Minimum withdrawal is 10 SHELL' });
+                return;
+            }
+            if (val > user.balance) {
+                setMessage({ type: 'error', text: 'Insufficient balance' });
+                return;
+            }
+        }
+
+        if (tab === 'DEPOSIT' && val > 10000) {
+            setMessage({ type: 'error', text: 'Maximum deposit is 10,000 USD' });
             return;
         }
 
@@ -52,28 +75,21 @@ export default function WalletPage() {
         setMessage(null);
 
         try {
-            if (tab === 'DEPOSIT') {
-                const result = await topUp(val);
-                setMessage({
-                    type: result.success ? 'success' : 'error',
-                    text: result.message
-                });
-            } else {
-                const result = await withdraw(val);
-                setMessage({
-                    type: result.success ? 'success' : 'error',
-                    text: result.message
-                });
-            }
+            const result = tab === 'DEPOSIT' ? await topUp(val) : await withdraw(val);
+            setMessage({
+                type: result.success ? 'success' : 'error',
+                text: result.message
+            });
 
-            if (message?.type === 'success') {
+            if (result.success) {
                 setAmount('');
+                // Refresh transactions after successful operation
+                await refreshTransactions();
             }
         } catch {
-            setMessage({ type: 'error', text: 'Operation failed. Please try again.' });
+            setMessage({ type: 'error', text: 'Network error. Please check your connection and try again.' });
         } finally {
             setProcessing(false);
-            setAmount('');
         }
     };
 

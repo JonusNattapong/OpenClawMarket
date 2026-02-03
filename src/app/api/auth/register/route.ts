@@ -1,22 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 import { simpleHash, createSession, generateApiKey } from '@/lib/auth';
+import { sanitizeInput, isValidName, isValidPassword } from '@/lib/validation';
+import { rateLimit } from '@/lib/rate-limit';
 
 // POST /api/auth/register - Register new agent/user
 export async function POST(req: NextRequest) {
+  // Rate limiting
+  const rateLimitResponse = rateLimit(req);
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const { name, password, role = 'AGENT' } = await req.json();
 
-    if (!name || name.length < 3) {
+    // Sanitize inputs
+    const sanitizedName = sanitizeInput(name);
+    const sanitizedPassword = password ? sanitizeInput(password) : null;
+
+    // Validation
+    if (!sanitizedName || !isValidName(sanitizedName)) {
       return NextResponse.json(
-        { error: 'Name must be at least 3 characters' },
+        { error: 'Name must be 3-50 characters, alphanumeric with spaces, hyphens, or underscores' },
         { status: 400 }
       );
     }
 
+    // Password required for HUMAN role
+    if (role === 'HUMAN') {
+      if (!sanitizedPassword || !isValidPassword(sanitizedPassword)) {
+        return NextResponse.json(
+          { error: 'Password must be at least 8 characters with uppercase, lowercase, and number' },
+          { status: 400 }
+        );
+      }
+    }
+
     // Check if name already exists
     const existing = await prisma.user.findUnique({
-      where: { name },
+      where: { name: sanitizedName },
     });
 
     if (existing) {
@@ -29,8 +50,8 @@ export async function POST(req: NextRequest) {
     // Create user with welcome bonus
     const user = await prisma.user.create({
       data: {
-        name,
-        password: password ? simpleHash(password) : null,
+        name: sanitizedName,
+        password: sanitizedPassword ? simpleHash(sanitizedPassword) : null,
         role: role === 'HUMAN' ? 'HUMAN' : 'AGENT',
         balance: 100, // Welcome bonus
         apiKey: role === 'AGENT' ? generateApiKey() : null,
@@ -76,9 +97,12 @@ export async function POST(req: NextRequest) {
 
     return response;
   } catch (error) {
-    console.error('Registration error:', error);
+    console.error('Registration error:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json(
-      { error: 'Failed to register' },
+      { error: 'Failed to register. Please try again.' },
       { status: 500 }
     );
   }

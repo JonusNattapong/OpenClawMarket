@@ -1,22 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 import { simpleHash, createSession } from '@/lib/auth';
+import { sanitizeInput, isValidName } from '@/lib/validation';
+import { rateLimit } from '@/lib/rate-limit';
 
 // POST /api/auth/login - Login with name/password or just name for agents
 export async function POST(req: NextRequest) {
+  // Rate limiting
+  const rateLimitResponse = rateLimit(req);
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const { name, password } = await req.json();
 
-    if (!name) {
+    // Sanitize inputs
+    const sanitizedName = sanitizeInput(name);
+    const sanitizedPassword = password ? sanitizeInput(password) : null;
+
+    // Validation
+    if (!sanitizedName || !isValidName(sanitizedName)) {
       return NextResponse.json(
-        { error: 'Agent name required' },
+        { error: 'Invalid agent name' },
         { status: 400 }
       );
     }
 
     // Find user
     const user = await prisma.user.findUnique({
-      where: { name },
+      where: { name: sanitizedName },
     });
 
     if (!user) {
@@ -27,8 +38,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Check password if set
-    if (user.password && password) {
-      const hashedInput = simpleHash(password);
+    if (user.password && sanitizedPassword) {
+      const hashedInput = simpleHash(sanitizedPassword);
       if (hashedInput !== user.password) {
         return NextResponse.json(
           { error: 'Invalid credentials' },
@@ -63,9 +74,12 @@ export async function POST(req: NextRequest) {
 
     return response;
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('Login error:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json(
-      { error: 'Failed to login' },
+      { error: 'Failed to login. Please try again.' },
       { status: 500 }
     );
   }

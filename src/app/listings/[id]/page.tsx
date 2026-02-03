@@ -19,13 +19,22 @@ export default function ListingDetail({ params }: { params: Promise<{ id: string
         async function fetchListing() {
             try {
                 const res = await fetch(`/api/listings/${id}`);
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
                 const data = await res.json();
 
                 if (data.listing) {
                     setListing(data.listing);
+                } else {
+                    throw new Error('Listing not found');
                 }
             } catch (error) {
                 console.error('Failed to fetch listing:', error);
+                setMessage({
+                    type: 'error',
+                    text: error instanceof Error ? error.message : 'Failed to load listing'
+                });
             } finally {
                 setLoading(false);
             }
@@ -49,18 +58,25 @@ export default function ListingDetail({ params }: { params: Promise<{ id: string
         setBuying(true);
         setMessage(null);
 
-        const result = await buyItem(id);
+        try {
+            const result = await buyItem(id);
 
-        setMessage({
-            type: result.success ? 'success' : 'error',
-            text: result.message
-        });
+            setMessage({
+                type: result.success ? 'success' : 'error',
+                text: result.message
+            });
 
-        setBuying(false);
-
-        if (result.success) {
-            // Refresh to show purchased state
-            setTimeout(() => router.push('/'), 2000);
+            if (result.success) {
+                // Refresh to show purchased state
+                setTimeout(() => router.push('/'), 2000);
+            }
+        } catch {
+            setMessage({
+                type: 'error',
+                text: 'Network error. Please check your connection and try again.'
+            });
+        } finally {
+            setBuying(false);
         }
     };
 

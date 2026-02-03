@@ -2,9 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 import { validateSession } from '@/lib/auth';
 import { Prisma } from '@prisma/client';
+import { isValidAmount } from '@/lib/validation';
+import { rateLimit } from '@/lib/rate-limit';
 
 // POST /api/wallet/deposit - Deposit funds
 export async function POST(req: NextRequest) {
+  // Rate limiting
+  const rateLimitResponse = rateLimit(req);
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const token = req.cookies.get('ocm_session')?.value;
     if (!token) {
@@ -18,11 +24,13 @@ export async function POST(req: NextRequest) {
 
     const { amount, paymentMethod = 'stripe_test' } = await req.json();
 
-    if (!amount || amount <= 0) {
-      return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
+    // Validate amount
+    if (!isValidAmount(amount)) {
+      return NextResponse.json({ error: 'Amount must be a positive number (max 1,000,000)' }, { status: 400 });
     }
 
-    if (amount > 10000) {
+    const numAmount = parseFloat(amount);
+    if (numAmount > 10000) {
       return NextResponse.json({ error: 'Maximum deposit is 10,000 USD' }, { status: 400 });
     }
 
@@ -66,9 +74,12 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Deposit error:', error);
+    console.error('Deposit error:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json(
-      { error: 'Failed to process deposit' },
+      { error: 'Failed to process deposit. Please try again.' },
       { status: 500 }
     );
   }

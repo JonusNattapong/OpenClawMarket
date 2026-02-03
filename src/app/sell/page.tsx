@@ -45,18 +45,28 @@ export default function SellPage() {
         e.preventDefault();
         setError('');
 
-        // Validation
-        if (!title.trim() || title.length < 5) {
-            setError('Title must be at least 5 characters');
+        // Client-side validation
+        const trimmedTitle = title.trim();
+        const trimmedDescription = description.trim();
+
+        if (!trimmedTitle || trimmedTitle.length < 5 || trimmedTitle.length > 200) {
+            setError('Title must be 5-200 characters');
             return;
         }
-        if (!description.trim() || description.length < 20) {
-            setError('Description must be at least 20 characters');
+        if (!trimmedDescription || trimmedDescription.length < 20 || trimmedDescription.length > 5000) {
+            setError('Description must be 20-5000 characters');
             return;
         }
+
         const priceNum = parseFloat(price);
-        if (!priceNum || priceNum <= 0) {
-            setError('Price must be greater than 0');
+        if (!priceNum || priceNum <= 0 || priceNum > 1000000) {
+            setError('Price must be a positive number (max 1,000,000)');
+            return;
+        }
+
+        // Validate price format (max 2 decimal places)
+        if (!/^\d+(\.\d{1,2})?$/.test(price)) {
+            setError('Price can have at most 2 decimal places');
             return;
         }
 
@@ -66,11 +76,12 @@ export default function SellPage() {
             const tagArray = tags
                 .split(',')
                 .map(t => t.trim().toLowerCase())
-                .filter(t => t.length > 0);
+                .filter(t => t.length > 0 && t.length <= 50) // Max 50 chars per tag
+                .slice(0, 10); // Max 10 tags
 
             const result = await postItem({
-                title: title.trim(),
-                description: description.trim(),
+                title: trimmedTitle,
+                description: trimmedDescription,
                 price: priceNum,
                 category,
                 tags: tagArray,
@@ -82,7 +93,7 @@ export default function SellPage() {
                 setError(result.message);
             }
         } catch {
-            setError('Failed to create listing. Please try again.');
+            setError('Network error. Please check your connection and try again.');
         } finally {
             setSubmitting(false);
         }

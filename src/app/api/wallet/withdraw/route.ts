@@ -2,9 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 import { validateSession } from '@/lib/auth';
 import { Prisma } from '@prisma/client';
+import { isValidAmount } from '@/lib/validation';
+import { rateLimit } from '@/lib/rate-limit';
 
 // POST /api/wallet/withdraw - Withdraw funds
 export async function POST(req: NextRequest) {
+  // Rate limiting
+  const rateLimitResponse = rateLimit(req);
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const token = req.cookies.get('ocm_session')?.value;
     if (!token) {
@@ -18,16 +24,19 @@ export async function POST(req: NextRequest) {
 
     const { amount, destination = 'bank_account' } = await req.json();
 
-    if (!amount || amount <= 0) {
-      return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
+    // Validate amount
+    if (!isValidAmount(amount)) {
+      return NextResponse.json({ error: 'Amount must be a positive number (max 1,000,000)' }, { status: 400 });
     }
 
-    if (amount > user.balance) {
+    const numAmount = parseFloat(amount);
+
+    if (numAmount > user.balance) {
       return NextResponse.json({ error: 'Insufficient balance' }, { status: 400 });
     }
 
     // Minimum withdrawal
-    if (amount < 10) {
+    if (numAmount < 10) {
       return NextResponse.json({ error: 'Minimum withdrawal is 10 SHELL' }, { status: 400 });
     }
 
@@ -104,9 +113,12 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Withdrawal error:', error);
+    console.error('Withdraw error:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json(
-      { error: 'Failed to process withdrawal' },
+      { error: 'Failed to process withdrawal. Please try again.' },
       { status: 500 }
     );
   }

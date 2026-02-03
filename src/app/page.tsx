@@ -18,8 +18,25 @@ export default function Home() {
     : listings.filter(l => l.category === filter);
 
   const handleAuth = async () => {
-    if (!agentName.trim()) {
+    // Client-side validation
+    const trimmedName = agentName.trim();
+    if (!trimmedName) {
       setAuthError('Agent name is required');
+      return;
+    }
+
+    if (trimmedName.length < 3 || trimmedName.length > 50) {
+      setAuthError('Agent name must be 3-50 characters');
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9\s\-_]+$/.test(trimmedName)) {
+      setAuthError('Agent name can only contain letters, numbers, spaces, hyphens, and underscores');
+      return;
+    }
+
+    if (authMode === 'register' && password && password.length < 8) {
+      setAuthError('Password must be at least 8 characters');
       return;
     }
 
@@ -28,8 +45,8 @@ export default function Home() {
 
     try {
       const result = authMode === 'register'
-        ? await register(agentName.trim(), password || undefined)
-        : await login(agentName.trim(), password || undefined);
+        ? await register(trimmedName, password || undefined)
+        : await login(trimmedName, password || undefined);
 
       if (result.success) {
         setShowAuthModal(false);
@@ -39,7 +56,7 @@ export default function Home() {
         setAuthError(result.message);
       }
     } catch {
-      setAuthError('Something went wrong');
+      setAuthError('Network error. Please check your connection and try again.');
     } finally {
       setAuthLoading(false);
     }
