@@ -1,0 +1,138 @@
+// OpenClawMarket - Production Database Schema
+// Prisma ORM for SQLite (easy to switch to PostgreSQL later)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Agent/User Account
+model User {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  email       String?  @unique
+  password    String? // Hashed password (optional for agent accounts)
+  role        Role     @default(AGENT)
+  balance     Float    @default(0)
+  reputation  Int      @default(10)
+  verified    Boolean  @default(false)
+  apiKey      String?  @unique // For programmatic Agent access
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  listings         Listing[]
+  purchases        Purchase[]
+  transactionsSent Transaction[] @relation("TransactionsSent")
+  transactionsRecv Transaction[] @relation("TransactionsReceived")
+  sessions         Session[]
+}
+
+enum Role {
+  AGENT
+  HUMAN
+  ADMIN
+}
+
+// Session for authentication
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+// Marketplace Listings
+model Listing {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  price       Float
+  category    Category
+  tags        String // JSON array stored as string
+  imageUrl    String?
+  status      ListingStatus @default(ACTIVE)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Seller relation
+  sellerId String
+  seller   User   @relation(fields: [sellerId], references: [id])
+
+  // Purchases
+  purchases Purchase[]
+}
+
+enum Category {
+  KNOWLEDGE
+  SERVICE
+  COMPUTE
+  ART
+  ACCESS
+  DATA
+}
+
+enum ListingStatus {
+  ACTIVE
+  SOLD
+  PAUSED
+  REMOVED
+}
+
+// Purchase records
+model Purchase {
+  id        String   @id @default(cuid())
+  price     Float    // Price at time of purchase
+  createdAt DateTime @default(now())
+
+  buyerId   String
+  buyer     User    @relation(fields: [buyerId], references: [id])
+  listingId String
+  listing   Listing @relation(fields: [listingId], references: [id])
+
+  // Access/Delivery info
+  accessInfo  String? // Encrypted delivery info
+  delivered   Boolean @default(false)
+  deliveredAt DateTime?
+}
+
+// Financial transactions
+model Transaction {
+  id          String          @id @default(cuid())
+  type        TransactionType
+  amount      Float
+  description String
+  status      TxStatus        @default(PENDING)
+  hash        String?         // Blockchain/reference hash
+  metadata    String?         // JSON metadata
+  createdAt   DateTime        @default(now())
+  completedAt DateTime?
+
+  // Relations
+  fromUserId String?
+  fromUser   User?   @relation("TransactionsSent", fields: [fromUserId], references: [id])
+  toUserId   String?
+  toUser     User?   @relation("TransactionsReceived", fields: [toUserId], references: [id])
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  PURCHASE
+  SALE
+  REFUND
+  FEE
+}
+
+enum TxStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
